@@ -79,7 +79,7 @@ object CogLayerIngest extends CommandApp(
       val layoutScheme = ZoomedLayoutScheme(WebMercator, tileSize = 256)
 
       // We need to reproject the tiles to WebMercator
-      val (zoom, reprojected): (Int, RDD[(SpatialKey, MultibandTile)] with Metadata[TileLayerMetadata[SpatialKey]]) =
+      val (zoom, reprojected): (Int, MultibandTileLayerRDD[SpatialKey]) =
         MultibandTileLayerRDD(tiled, rasterMetaData)
           .reproject(WebMercator, layoutScheme, Bilinear)
 
@@ -91,15 +91,9 @@ object CogLayerIngest extends CommandApp(
       // Note: AttributeStore and LayerWriter don't have to use the same thing
       val writer = new FileCOGLayerWriter(attributeStore, new URI(output).getPath)
 
-      // Pyramiding up the zoom levels, write our tiles out to the local file system.
-      Pyramid.upLevels(reprojected, layoutScheme, zoom, Bilinear) { (rdd, z) =>
-        val layerId = LayerId("landsat", z)
-        // If the layer exists already, delete it out before writing
-        if(attributeStore.layerExists(layerId)) {
-          attributeStore.delete(layerId)
-        }
-        writer.write(layerId.name, rdd, layerId.zoom, ZCurveKeyIndexMethod)
-      }
+      // We don't have to call the Pyramid function since COGs overlap with the concept
+      // all the zoom levels will be written out for us
+      writer.write("landsat-cog", reprojected, zoom, ZCurveKeyIndexMethod)
 
       spark.stop()
     }
